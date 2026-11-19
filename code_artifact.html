@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GLASS CEILING BREAKOUT | ガラスの天井・物理演算ブロック崩し</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Noto Sans JP & JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #090d16;
+            --panel-bg: rgba(17, 25, 40, 0.85);
+            --neon-pink: #f43f5e;
+            --neon-cyan: #06b6d4;
+            --neon-emerald: #10b981;
+            --neon-amber: #f59e0b;
+        }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: var(--bg-dark);
+            color: #f8fafc;
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .font-mono-tech {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ガラスモーフィズムパネル */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+        }
+
+        /* モード選択ボタンのアニメーション */
+        .mode-btn {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .mode-btn:hover {
+            transform: translateY(-2px);
+        }
+        .mode-btn.active-jp-female {
+            border-color: var(--neon-pink);
+            box-shadow: 0 0 20px rgba(244, 63, 94, 0.35);
+            background: linear-gradient(135deg, rgba(244, 63, 94, 0.2), rgba(17, 25, 40, 0.9));
+        }
+        .mode-btn.active-jp-male {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.35);
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(17, 25, 40, 0.9));
+        }
+        .mode-btn.active-nordic {
+            border-color: var(--neon-emerald);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(17, 25, 40, 0.9));
+        }
+
+        /* 画面シェイクアニメーション */
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0); }
+            20% { transform: translate(-4px, 3px); }
+            40% { transform: translate(4px, -3px); }
+            60% { transform: translate(-3px, -2px); }
+            80% { transform: translate(3px, 2px); }
+        }
+        .shake-effect {
+            animation: shake 0.25s ease-in-out;
+        }
+
+        /* キャンバスコンテナ */
+        #canvas-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 3 / 4;
+            max-height: 76vh;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+            background: radial-gradient(circle at 50% 20%, #162033 0%, #090d16 100%);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-3 sm:p-5">
+
+    <!-- ヘッダー -->
+    <header class="max-w-6xl w-full mx-auto flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-rose-500 via-purple-600 to-cyan-500 flex items-center justify-center shadow-lg">
+                <!-- 割れたガラスアイコン SVG -->
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2L9 9l-7 3 7 3 3 7 3-7 7-3-7-3-3-7z"></path>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-lg sm:text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">
+                    GLASS CEILING <span class="text-rose-500">BREAKER</span>
+                </h1>
+                <p class="text-xs text-slate-400">統計データ物理変換型・社会風刺ブロック崩し</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button id="sound-toggle" class="glass-panel px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-slate-800 transition cursor-pointer" title="効果音のオン/オフ">
+                <span id="sound-icon">🔊</span>
+                <span id="sound-label">SOUND ON</span>
+            </button>
+            <button id="help-btn" class="glass-panel px-3 py-2 rounded-lg text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer">
+                ❓ ルール・統計解説
+            </button>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-5 items-start my-auto">
+        
+        <!-- 左カラム：モード選択 & 統計パラメータ表示 -->
+        <section class="lg:col-span-5 flex flex-col gap-4 order-2 lg:order-1">
+            
+            <!-- モード選択パネル -->
+            <div class="glass-panel rounded-xl p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">1. 比較モードを選択（属性・国）</h2>
+                    <span class="text-[11px] font-mono-tech text-slate-500">SELECT PARAMETER</span>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-2.5">
+                    <!-- 日本・女性モード -->
+                    <button onclick="selectMode('jp_female')" id="btn-jp_female" class="mode-btn active-jp-female text-left p-3 rounded-xl border border-slate-700/80 bg-slate-900/60 cursor-pointer">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-sm text-rose-400">🇯🇵 日本・女性モード</span>
+                            <span class="text-[10px] font-mono-tech px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">HARD / REALITY</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">極厚の「ガラスの天井」＋無償労働の重力バイアス＋バイアス障害物</p>
+                    </button>
+
+                    <!-- 日本・男性モード -->
+                    <button onclick="selectMode('jp_male')" id="btn-jp_male" class="mode-btn text-left p-3 rounded-xl border border-slate-700/80 bg-slate-900/60 cursor-pointer">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-sm text-cyan-400">🇯🇵 日本・男性モード</span>
+                            <span class="text-[10px] font-mono-tech px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">EASY / PRIVILEGE</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">高質量・高貫通ボール。ガラスの天井が存在せず役員層へ直行可能</p>
+                    </button>
+
+                    <!-- 北欧・平等モード -->
+                    <button onclick="selectMode('nordic')" id="btn-nordic" class="mode-btn text-left p-3 rounded-xl border border-slate-700/80 bg-slate-900/60 cursor-pointer">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-sm text-emerald-400">🇮🇸 北欧・平等モード</span>
+                            <span class="text-[10px] font-mono-tech px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">IDEAL / NORDIC</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">天井なし＋育休シェア・柔軟労働アイテムでボールが増殖・強化</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- リアルタイム統計パラメータパネル -->
+            <div class="glass-panel rounded-xl p-4">
+                <div class="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">📊 物理変換された統計データ</h2>
+                    <span id="stat-rank-badge" class="text-xs font-mono-tech font-bold text-rose-400">GGGI: 118位</span>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <!-- パラメータ1: ボール質量・攻撃力 -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-400">ボール質量 / 攻撃力 <span class="text-[10px] text-slate-500">(男女賃金格差比)</span></span>
+                            <span id="stat-wage" class="font-mono-tech font-bold text-white">75.2% (攻撃力 1.0)</span>
+                        </div>
+                        <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div id="bar-wage" class="bg-rose-500 h-2 rounded-full transition-all duration-500" style="width: 75.2%"></div>
+                        </div>
+                    </div>
+
+                    <!-- パラメータ2: ガラスの天井耐久値 -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-400">ガラスの天井 耐久値 <span class="text-[10px] text-slate-500">(管理職比率から算出)</span></span>
+                            <span id="stat-ceiling" class="font-mono-tech font-bold text-rose-400">HP 35 (管理職14.6%)</span>
+                        </div>
+                        <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div id="bar-ceiling" class="bg-amber-400 h-2 rounded-full transition-all duration-500" style="width: 85%"></div>
+                        </div>
+                    </div>
+
+                    <!-- パラメータ3: 下向き重力バイアス -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-400">下向き重力バイアス <span class="text-[10px] text-slate-500">(無償労働時間差)</span></span>
+                            <span id="stat-gravity" class="font-mono-tech font-bold text-rose-400">5.5倍 (強い引き戻し)</span>
+                        </div>
+                        <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                            <div id="bar-gravity" class="bg-purple-500 h-2 rounded-full transition-all duration-500" style="width: 90%"></div>
+                        </div>
+                    </div>
+
+                    <!-- 皮肉・解説ボックス -->
+                    <div class="mt-3 p-3 rounded-lg bg-slate-950/70 border border-slate-800/90 text-slate-300 leading-relaxed">
+                        <span class="text-amber-400 font-bold">💡 データ皮肉メモ:</span>
+                        <p id="stat-comment" class="mt-1 text-[11px] text-slate-400">
+                            課長から部長へ昇進しようとすると、見えない「ガラスの天井」に弾き返されます。さらに家事・育児の無償労働（男性の約5.5倍）が重力となってボールを下に引っ張ります。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 右カラム：ゲームキャンバスエリア -->
+        <section class="lg:col-span-7 flex flex-col items-center order-1 lg:order-2 w-full">
+            
+            <!-- スコア・ステータスバー -->
+            <div class="w-full max-w-[520px] glass-panel rounded-xl px-4 py-2.5 mb-3 flex items-center justify-between text-xs sm:text-sm">
+                <div class="flex items-center gap-4">
+                    <div>
+                        <span class="text-slate-400 text-[10px] block">SCORE</span>
+                        <span id="hud-score" class="font-mono-tech font-bold text-base sm:text-lg text-white">00000</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-400 text-[10px] block">REACHED TIER</span>
+                        <span id="hud-tier" class="font-bold text-cyan-400">一般職</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="text-right">
+                        <span class="text-slate-400 text-[10px] block">CEILING HP</span>
+                        <span id="hud-ceiling-hp" class="font-mono-tech font-bold text-rose-400">35 / 35</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-slate-400 text-[10px] block">LIVES</span>
+                        <span id="hud-lives" class="font-mono-tech font-bold text-emerald-400">●●●</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ゲーム画面コンテナ -->
+            <div id="canvas-wrapper" class="max-w-[520px]">
+                <canvas id="gameCanvas"></canvas>
+
+                <!-- スタートオーバーレイ -->
+                <div id="overlay-start" class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-10">
+                    <span id="overlay-mode-badge" class="px-3 py-1 rounded-full text-xs font-mono-tech font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 mb-3">
+                        🇯🇵 日本・女性モード (HARD)
+                    </span>
+                    <h3 class="text-2xl sm:text-3xl font-black text-white mb-2">キャリアの壁を打ち破れ</h3>
+                    <p class="text-xs sm:text-sm text-slate-300 max-w-sm mb-6 leading-relaxed">
+                        下層の「一般職」から最上段の「役員・政治家」を目指してください。<br>
+                        <span class="text-slate-400 text-xs">操作：マウス移動 / タッチドラッグ / 左右矢印キー</span>
+                    </p>
+                    <button id="start-btn" class="px-8 py-3.5 rounded-xl font-black text-sm sm:text-base text-white bg-gradient-to-r from-rose-500 to-indigo-600 hover:from-rose-400 hover:to-indigo-500 shadow-lg shadow-rose-500/25 transform transition active:scale-95 cursor-pointer">
+                        ▶ GAME START / 労働を開始する
+                    </button>
+                </div>
+
+                <!-- リザルトオーバーレイ -->
+                <div id="overlay-result" class="hidden absolute inset-0 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-5 text-center z-20">
+                    <div id="result-badge" class="px-3 py-1 rounded-full text-xs font-mono-tech font-bold mb-2">
+                        RESULT
+                    </div>
+                    <h3 id="result-title" class="text-2xl sm:text-3xl font-black text-white mb-1">キャリア到達結果</h3>
+                    <p id="result-subtitle" class="text-xs text-slate-400 mb-4">最高到達階層：課長クラス（ガラスの天井に阻まれた）</p>
+
+                    <div class="w-full max-w-sm glass-panel rounded-xl p-4 mb-4 text-left space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-400">獲得スコア:</span>
+                            <span id="result-score" class="font-mono-tech font-bold text-white text-sm">12,400 pts</span>
+                        </div>
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-400">ガラスの天井 損傷率:</span>
+                            <span id="result-ceiling-dmg" class="font-mono-tech font-bold text-rose-400">34% (ヒビのみ)</span>
+                        </div>
+                        <div class="border-t border-slate-800 pt-2 mt-2">
+                            <span class="text-[11px] font-bold text-amber-400 block mb-1">📊 現実の統計データ解説:</span>
+                            <p id="result-trivia" class="text-xs text-slate-300 leading-relaxed">
+                                日本の管理的職業従事者に占める女性の割合は約14.6%（G7最下位）。個人の努力だけでは突破困難な「構造的な壁」が存在します。
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap justify-center gap-3">
+                        <button id="retry-btn" class="px-6 py-3 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 shadow-lg transition cursor-pointer">
+                            🔄 同じモードで再挑戦
+                        </button>
+                        <button id="switch-mode-btn" class="px-5 py-3 rounded-xl font-bold text-xs sm:text-sm text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-600 transition cursor-pointer">
+                            ⚖️ 別のモードで格差を比較
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- モバイル用タッチコントロール補助バー -->
+            <div class="w-full max-w-[520px] mt-3 flex items-center justify-between gap-2 sm:hidden">
+                <button id="touch-left" class="flex-1 glass-panel py-3 rounded-xl font-bold text-slate-300 active:bg-slate-700">◀ LEFT</button>
+                <button id="touch-right" class="flex-1 glass-panel py-3 rounded-xl font-bold text-slate-300 active:bg-slate-700">RIGHT ▶</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- ルール・解説モーダル -->
+    <div id="help-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="glass-panel max-w-lg w-full rounded-2xl p-6 relative border border-slate-700">
+            <button id="close-help-btn" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl font-bold cursor-pointer">✕</button>
+            <h3 class="text-lg font-black text-white mb-3">🎮 このゲームについて（風刺と統計データ）</h3>
+            <div class="space-y-3 text-xs sm:text-sm text-slate-300 leading-relaxed max-h-[70vh] overflow-y-auto pr-1">
+                <p>
+                    このゲームは、世界経済フォーラム（WEF）のジェンダーギャップ指数や厚生労働省・総務省の労働統計をベースに、<strong>「性別や国によるキャリア難易度の違い」</strong>を物理法則に変換したシミュレーション・ブロック崩しです。
+                </p>
+                <div class="bg-slate-900/90 p-3 rounded-xl border border-slate-800 space-y-2">
+                    <h4 class="font-bold text-rose-400">1. ガラスの天井（Glass Ceiling）</h4>
+                    <p class="text-xs text-slate-400">
+                        日本・女性モードでは、課長と部長の間に透明で極めて硬いバリア（耐久値35）が張られています。何回当ててもヒビが入るだけで跳ね返される絶望感を体感できます。
+                    </p>
+                    <h4 class="font-bold text-purple-400">2. 無償労働の重力バイアス</h4>
+                    <p class="text-xs text-slate-400">
+                        日本の共働き世帯における家事・育児時間の男女差（女性が男性の約5.5倍）を再現。ボールが常に下方向へ引っ張られるため、上層へ到達しにくくなります。
+                    </p>
+                    <h4 class="font-bold text-amber-400">3. アンコンシャス・バイアス障害物</h4>
+                    <p class="text-xs text-slate-400">
+                        日本・女性モードのみ、中盤に「お茶汲み」「マミートラック」「無意識の偏見」と書かれた障害物バンパーが出現し、ボールの軌道を強制的に下へ弾き返します。
+                    </p>
+                </div>
+            </div>
+            <button id="close-help-bottom" class="mt-5 w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-xs text-white cursor-pointer">
+                閉じる
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * GLASS CEILING BREAKER - 物理演算・風刺ブロック崩しエンジン
+         * ============================================================================
+         */
+
+        // --- 1. サウンドエンジン (Web Audio API 合成音) ---
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+
+            // パドル反射音
+            playPaddle() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(280, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(420, this.ctx.currentTime + 0.08);
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.08);
+            }
+
+            // ブロック破壊音
+            playBlockBreak(tierIndex) {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                const baseFreq = 320 + tierIndex * 90;
+                osc.frequency.setValueAtTime(baseFreq, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, this.ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.12);
+            }
+
+            // ガラスの天井に弾かれる硬い金属・ガラス音
+            playGlassHit() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                [1450, 2180, 3100].forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = idx === 0 ? 'square' : 'sine';
+                    osc.frequency.setValueAtTime(freq, now);
+                    osc.frequency.exponentialRampToValueAtTime(freq * 0.85, now + 0.14);
+                    gain.gain.setValueAtTime(0.08 / (idx + 1), now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.14);
+                });
+            }
+
+            // ガラス破壊音
+            playGlassShatter() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                for (let i = 0; i < 6; i++) {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    const startFreq = 800 + Math.random() * 2000;
+                    osc.frequency.setValueAtTime(startFreq, now + i * 0.03);
+                    osc.frequency.exponentialRampToValueAtTime(200, now + i * 0.03 + 0.25);
+                    gain.gain.setValueAtTime(0.12, now + i * 0.03);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.03 + 0.25);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.03);
+                    osc.stop(now + i * 0.03 + 0.25);
+                }
+            }
+
+            // アイテム取得音
+            playPowerup() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.05);
+                    gain.gain.setValueAtTime(0.12, now + i * 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.15);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.05);
+                    osc.stop(now + i * 0.05 + 0.15);
+                });
+            }
+        }
+
+        const sound = new SoundFX();
+
+        // --- 2. モード別統計パラメータ設定 ---
+        const MODES = {
+            jp_female: {
+                id: 'jp_female',
+                name: '🇯🇵 日本・女性モード',
+                badgeText: '🇯🇵 日本・女性モード (HARD / REALITY)',
+                badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+                rankText: 'GGGI: 118位 / 146ヶ国',
+                rankColor: 'text-rose-400',
+                wageLabel: '75.2% (ボール小・攻撃力 1)',
+                wagePercent: 75.2,
+                wageBarColor: 'bg-rose-500',
+                ceilingLabel: 'HP 35 (管理職比率 14.6%)',
+                ceilingPercent: 95,
+                gravityLabel: '5.5倍 (家事・育児の強い重力)',
+                gravityPercent: 90,
+                comment: '課長から部長へ昇進しようとすると、見えない「ガラスの天井」に弾き返されます。さらに家事・育児の無償労働（男性の約5.5倍）が重力となってボールを下に引っ張り、マミートラックの障害物が進路を阻みます。',
+                // 物理パラメータ
+                ballRadius: 6.5,
+                ballPower: 1,
+                ballSpeed: 5.4,
+                ballColor: '#fb7185',
+                paddleWidthRatio: 0.20,
+                gravityY: 0.032,         // 下方向への強い引き戻し重力
+                ceilingMaxHp: 35,        // 極厚のガラスの天井
+                hasBumpers: true,        // アンコンシャスバイアス障害物あり
+                spawnSupportItems: false,
+                trivia: '日本の男女賃金格差は約24.8%（OECD平均の約2倍）、管理的職業従事者の女性比率は14.6%にとどまります。個人の努力だけでは突破困難な「構造の壁」が可視化されています。'
+            },
+            jp_male: {
+                id: 'jp_male',
+                name: '🇯🇵 日本・男性モード',
+                badgeText: '🇯🇵 日本・男性モード (EASY / PRIVILEGE)',
+                badgeClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+                rankText: '経済・政治領域: 圧倒的優位',
+                rankColor: 'text-cyan-400',
+                wageLabel: '100%基準 (高質量・貫通力 3)',
+                wagePercent: 100,
+                wageBarColor: 'bg-cyan-400',
+                ceilingLabel: 'HP 0 (ガラスの天井なし)',
+                ceilingPercent: 0,
+                gravityLabel: '1.0倍 (昇進バイアス・無重力)',
+                gravityPercent: 15,
+                comment: '年功序列と終身雇用の恩恵を受け、ボールが大きく重い（高攻撃力）状態からスタート。課長〜部長間の「ガラスの天井」が存在しないため、最上段の執行役員・政治家ブロックまで一気に突き進めます。',
+                // 物理パラメータ
+                ballRadius: 11,
+                ballPower: 3,
+                ballSpeed: 6.2,
+                ballColor: '#38bdf8',
+                paddleWidthRatio: 0.26,
+                gravityY: -0.005,        // わずかに上昇しやすい（ゲタを履かされている表現）
+                ceilingMaxHp: 0,         // 天井なし
+                hasBumpers: false,
+                spawnSupportItems: false,
+                trivia: '日本の上場企業役員の約85%以上、衆議院議員の約90%を男性が占めています。構造的な障壁がない状態がいかにスムーズに上層へ到達できるかが分かります。'
+            },
+            nordic: {
+                id: 'nordic',
+                name: '🇮🇸 北欧・平等モード',
+                badgeText: '🇮🇸 北欧・平等モード (IDEAL / NORDIC)',
+                badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+                rankText: 'GGGI: 1位 (アイスランド等)',
+                rankColor: 'text-emerald-400',
+                wageLabel: '91.4% (適正質量・攻撃力 2)',
+                wagePercent: 91.4,
+                wageBarColor: 'bg-emerald-400',
+                ceilingLabel: 'HP 0 (クオータ制により撤廃)',
+                ceilingPercent: 0,
+                gravityLabel: '1.2倍 (育休シェアで均衡)',
+                gravityPercent: 25,
+                comment: 'クオータ制（割当制度）と透明な賃金制度により「ガラスの天井」は撤廃済み。プレイ中は「パパ育休シェア」「柔軟な働き方」などのサポートアイテムが降り注ぎ、ボールが増殖して全員でトップ層を目指せます。',
+                // 物理パラメータ
+                ballRadius: 8.5,
+                ballPower: 2,
+                ballSpeed: 5.8,
+                ballColor: '#34d399',
+                paddleWidthRatio: 0.24,
+                gravityY: 0.004,
+                ceilingMaxHp: 0,
+                hasBumpers: false,
+                spawnSupportItems: true,  // ボール増殖・強化アイテムが出現
+                trivia: 'アイスランドは15年連続でジェンダーギャップ指数世界1位。企業の男女賃金格差の証明義務化や、父親の育児休業取得率の高さが社会全体の生産性を押し上げています。'
+            }
+        };
+
+        // キャリア階層定義（上から下へ配置：row 0 が最上段）
+        const CAREER_TIERS = [
+            { row: 0, name: '執行役員・社長・国会議員', short: '役員・政治家', hp: 3, points: 1000, color: '#f59e0b', glow: 'rgba(245, 158, 11, 0.5)', icon: '👑' },
+            { row: 1, name: '部長・本部長クラス',       short: '部長クラス',   hp: 2, points: 500,  color: '#a855f7', glow: 'rgba(168, 85, 247, 0.4)', icon: '💎' },
+            // --- ここに「ガラスの天井」が挿入される (row 1 と row 2 の間) ---
+            { row: 2, name: '課長・マネージャー',       short: '課長クラス',   hp: 2, points: 300,  color: '#3b82f6', glow: 'rgba(59, 130, 246, 0.3)', icon: '' },
+            { row: 3, name: '係長・主任',               short: '係長・主任',   hp: 1, points: 150,  color: '#06b6d4', glow: 'rgba(6, 182, 212, 0.3)',  icon: '' },
+            { row: 4, name: '一般職・非正規雇用',       short: '一般・非正規', hp: 1, points: 100,  color: '#64748b', glow: 'rgba(100, 116, 139, 0.2)',icon: '' }
+        ];
+
+        // --- 3. ゲーム状態管理変数 ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const wrapper = document.getElementById('canvas-wrapper');
+
+        let currentModeKey = 'jp_female';
+        let gameState = 'START'; // 'START', 'PLAYING', 'GAMEOVER', 'VICTORY'
+        let score = 0;
+        let lives = 3;
+        let highestTierReached = '一般・非正規';
+        let animationFrameId = null;
+
+        // エンティティ
+        let paddle = { x: 0, y: 0, width: 100, height: 14, speed: 8 };
+        let balls = [];
+        let bricks = [];
+        let particles = [];
+        let floatingTexts = [];
+        let bumpers = [];
+        let powerups = [];
+
+        // ガラスの天井オブジェクト
+        let glassCeiling = {
+            active: false,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 16,
+            hp: 35,
+            maxHp: 35,
+            cracks: [], // ヒビの座標データ
+            hitFlash: 0
+        };
+
+        // 入力状態
+        let keys = { left: false, right: false };
+
+        // --- 4. 初期化・リサイズ処理 ---
+        function resizeCanvas() {
+            const rect = wrapper.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+
+            // パドル位置再計算
+            paddle.y = rect.height - 28;
+            if (paddle.x + paddle.width > rect.width) {
+                paddle.x = rect.width - paddle.width;
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            if (gameState === 'START') {
+                setupLevel();
+                draw();
+            }
+        });
+
+        // --- 5. モード選択とUI更新 ---
+        function selectMode(modeKey) {
+            currentModeKey = modeKey;
+            const mode = MODES[modeKey];
+
+            // ボタンのアクティブスタイル切替
+            ['jp_female', 'jp_male', 'nordic'].forEach(k => {
+                const btn = document.getElementById(`btn-${k}`);
+                btn.classList.remove('active-jp-female', 'active-jp-male', 'active-nordic');
+                if (k === modeKey) {
+                    if (k === 'jp_female') btn.classList.add('active-jp-female');
+                    if (k === 'jp_male') btn.classList.add('active-jp-male');
+                    if (k === 'nordic') btn.classList.add('active-nordic');
+                }
+            });
+
+            // 統計パラメータパネル更新
+            const rankBadge = document.getElementById('stat-rank-badge');
+            rankBadge.textContent = mode.rankText;
+            rankBadge.className = `text-xs font-mono-tech font-bold ${mode.rankColor}`;
+
+            document.getElementById('stat-wage').textContent = mode.wageLabel;
+            const barWage = document.getElementById('bar-wage');
+            barWage.style.width = `${mode.wagePercent}%`;
+            barWage.className = `${mode.wageBarColor} h-2 rounded-full transition-all duration-500`;
+
+            document.getElementById('stat-ceiling').textContent = mode.ceilingLabel;
+            document.getElementById('bar-ceiling').style.width = `${mode.ceilingPercent}%`;
+
+            document.getElementById('stat-gravity').textContent = mode.gravityLabel;
+            document.getElementById('bar-gravity').style.width = `${mode.gravityPercent}%`;
+
+            document.getElementById('stat-comment').textContent = mode.comment;
+
+            // スタート画面オーバーレイのバッジ更新
+            const overlayBadge = document.getElementById('overlay-mode-badge');
+            overlayBadge.textContent = mode.badgeText;
+            overlayBadge.className = `px-3 py-1 rounded-full text-xs font-mono-tech font-bold border mb-3 ${mode.badgeClass}`;
+
+            // 盤面リセット
+            resetToStartScreen();
+        }
+
+        function resetToStartScreen() {
+            gameState = 'START';
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            document.getElementById('overlay-start').classList.remove('hidden');
+            document.getElementById('overlay-result').classList.add('hidden');
+            setupLevel();
+            draw();
+        }
+
+        // --- 6. レベル構築 ---
+        function setupLevel() {
+            const rect = wrapper.getBoundingClientRect();
+            const W = rect.width;
+            const H = rect.height;
+            const mode = MODES[currentModeKey];
+
+            score = 0;
+            lives = 3;
+            highestTierReached = '一般・非正規';
+            particles = [];
+            floatingTexts = [];
+            powerups = [];
+
+            // パドル初期化
+            paddle.width = W * mode.paddleWidthRatio;
+            paddle.height = 14;
+            paddle.x = (W - paddle.width) / 2;
+            paddle.y = H - 28;
+
+            // ボール初期化
+            balls = [createBall(W / 2, paddle.y - 16)];
+
+            // ブロック構築 (5階層 × 6列)
+            bricks = [];
+            const cols = 6;
+            const padding = 6;
+            const sideMargin = 14;
+            const brickWidth = (W - sideMargin * 2 - padding * (cols - 1)) / cols;
+            const brickHeight = 24;
+            const topOffset = 46;
+            const ceilingGap = mode.ceilingMaxHp > 0 ? 34 : 12; // ガラスの天井用スペース
+
+            CAREER_TIERS.forEach((tier) => {
+                // row 2以降はガラスの天井のスペース分下にずらす
+                const extraY = tier.row >= 2 ? ceilingGap : 0;
+                const y = topOffset + tier.row * (brickHeight + padding) + extraY;
+
+                for (let c = 0; c < cols; c++) {
+                    const x = sideMargin + c * (brickWidth + padding);
+                    bricks.push({
+                        x, y,
+                        width: brickWidth,
+                        height: brickHeight,
+                        tier: tier,
+                        hp: tier.hp,
+                        maxHp: tier.hp,
+                        alive: true,
+                        hitAnim: 0
+                    });
+                }
+            });
+
+            // ガラスの天井初期化（row 1 と row 2 の間）
+            const ceilingY = topOffset + 2 * (brickHeight + padding) + 6;
+            glassCeiling = {
+                active: mode.ceilingMaxHp > 0,
+                x: 8,
+                y: ceilingY,
+                width: W - 16,
+                height: 18,
+                hp: mode.ceilingMaxHp,
+                maxHp: mode.ceilingMaxHp,
+                cracks: [],
+                hitFlash: 0
+            };
+
+            // 日本・女性モード限定の「無意識の偏見・マミートラック」障害物バンパー
+            bumpers = [];
+            if (mode.hasBumpers) {
+                const bumperY = ceilingY + 135;
+                bumpers.push(
+                    { x: W * 0.28, y: bumperY, radius: 22, label: 'マミートラック', hitAnim: 0 },
+                    { x: W * 0.72, y: bumperY, radius: 22, label: '無意識の偏見', hitAnim: 0 }
+                );
+            }
+
+            updateHUD();
+        }
+
+        function createBall(x, y) {
+            const mode = MODES[currentModeKey];
+            const angle = -Math.PI / 2 + (Math.random() * 0.5 - 0.25);
+            return {
+                x, y,
+                vx: Math.cos(angle) * mode.ballSpeed,
+                vy: Math.sin(angle) * mode.ballSpeed,
+                radius: mode.ballRadius,
+                power: mode.ballPower,
+                color: mode.ballColor,
+                trail: []
+            };
+        }
+
+        // --- 7. ゲームループ & 物理演算 ---
+        function startGame() {
+            sound.init();
+            setupLevel();
+            gameState = 'PLAYING';
+            document.getElementById('overlay-start').classList.add('hidden');
+            document.getElementById('overlay-result').classList.add('hidden');
+            lastTime = performance.now();
+            gameLoop(lastTime);
+        }
+
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            if (gameState !== 'PLAYING') return;
+            const dt = Math.min((timestamp - lastTime) / 16.67, 2.0); // 60fps基準の補正
+            lastTime = timestamp;
+
+            update(dt);
+            draw();
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function update(dt) {
+            const rect = wrapper.getBoundingClientRect();
+            const W = rect.width;
+            const H = rect.height;
+            const mode = MODES[currentModeKey];
+
+            // パドルキーボード移動
+            if (keys.left) paddle.x -= paddle.speed * dt;
+            if (keys.right) paddle.x += paddle.speed * dt;
+            paddle.x = Math.max(4, Math.min(W - paddle.width - 4, paddle.x));
+
+            // ガラスの天井フラッシュ減衰
+            if (glassCeiling.hitFlash > 0) glassCeiling.hitFlash -= 0.08 * dt;
+
+            // ボールの更新
+            for (let i = balls.length - 1; i >= 0; i--) {
+                const b = balls[i];
+
+                // 軌跡保存
+                b.trail.push({ x: b.x, y: b.y });
+                if (b.trail.length > 8) b.trail.shift();
+
+                // 重力バイアス適用（無償労働の引き戻し効果）
+                b.vy += mode.gravityY * dt;
+
+                // 速度の極端な低下・上昇をクランプ
+                const currentSpeed = Math.hypot(b.vx, b.vy);
+                const maxSpeed = mode.ballSpeed * 1.45;
+                const minSpeed = mode.ballSpeed * 0.75;
+                if (currentSpeed > maxSpeed) {
+                    b.vx = (b.vx / currentSpeed) * maxSpeed;
+                    b.vy = (b.vy / currentSpeed) * maxSpeed;
+                } else if (currentSpeed < minSpeed) {
+                    b.vx = (b.vx / currentSpeed) * minSpeed;
+                    b.vy = (b.vy / currentSpeed) * minSpeed;
+                }
+
+                b.x += b.vx * dt;
+                b.y += b.vy * dt;
+
+                // 左右壁反射
+                if (b.x - b.radius < 0) {
+                    b.x = b.radius;
+                    b.vx = Math.abs(b.vx);
+                } else if (b.x + b.radius > W) {
+                    b.x = W - b.radius;
+                    b.vx = -Math.abs(b.vx);
+                }
+
+                // 上壁反射
+                if (b.y - b.radius < 0) {
+                    b.y = b.radius;
+                    b.vy = Math.abs(b.vy);
+                }
+
+                // パドルとの衝突判定
+                if (
+                    b.vy > 0 &&
+                    b.y + b.radius >= paddle.y &&
+                    b.y - b.radius <= paddle.y + paddle.height &&
+                    b.x >= paddle.x - b.radius &&
+                    b.x <= paddle.x + paddle.width + b.radius
+                ) {
+                    const hitOffset = (b.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
+                    const bounceAngle = hitOffset * (Math.PI / 3); // 最大60度
+                    const speed = Math.max(mode.ballSpeed, Math.hypot(b.vx, b.vy));
+                    b.vx = Math.sin(bounceAngle) * speed;
+                    b.vy = -Math.cos(bounceAngle) * speed;
+                    b.y = paddle.y - b.radius;
+                    sound.playPaddle();
+                    spawnParticles(b.x, paddle.y, '#ffffff', 5);
+                }
+
+                // ガラスの天井との衝突判定
+                if (glassCeiling.active) {
+                    if (
+                        b.x + b.radius > glassCeiling.x &&
+                        b.x - b.radius < glassCeiling.x + glassCeiling.width &&
+                        b.y + b.radius > glassCeiling.y &&
+                        b.y - b.radius < glassCeiling.y + glassCeiling.height
+                    ) {
+                        // 上からか下からか判定して反射
+                        if (b.vy < 0) {
+                            b.y = glassCeiling.y + glassCeiling.height + b.radius;
+                            b.vy = Math.abs(b.vy);
+                        } else {
+                            b.y = glassCeiling.y - b.radius;
+                            b.vy = -Math.abs(b.vy);
+                        }
+
+                        // ダメージ計算
+                        glassCeiling.hp = Math.max(0, glassCeiling.hp - b.power);
+                        glassCeiling.hitFlash = 1.0;
+
+                        // ヒビを追加
+                        addGlassCrack(b.x, glassCeiling.y + glassCeiling.height / 2);
+                        spawnParticles(b.x, glassCeiling.y + glassCeiling.height, '#e0f2fe', 10);
+                        triggerScreenShake();
+
+                        if (glassCeiling.hp <= 0) {
+                            glassCeiling.active = false;
+                            sound.playGlassShatter();
+                            score += 5000;
+                            addFloatingText(W / 2, glassCeiling.y, '💥 ガラスの天井を突破！ +5000', '#38bdf8');
+                            spawnParticles(W / 2, glassCeiling.y, '#bae6fd', 45);
+                        } else {
+                            sound.playGlassHit();
+                            const quotes = ['弾かれた！', '管理職の壁！', '前例がない！', 'まだ早い！', '硬すぎる！'];
+                            const q = quotes[Math.floor(Math.random() * quotes.length)];
+                            addFloatingText(b.x, glassCeiling.y + 28, `${q} (残HP:${glassCeiling.hp})`, '#fda4af');
+                        }
+                        updateHUD();
+                    }
+                }
+
+                // アンコンシャス・バイアス障害物バンパーとの衝突
+                bumpers.forEach(bmp => {
+                    if (bmp.hitAnim > 0) bmp.hitAnim -= 0.08 * dt;
+                    const dx = b.x - bmp.x;
+                    const dy = b.y - bmp.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < b.radius + bmp.radius) {
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        const speed = Math.hypot(b.vx, b.vy);
+                        // 下向きバイアスをかけて弾き返す
+                        b.vx = nx * speed * 1.1;
+                        b.vy = Math.abs(ny * speed) + 1.2;
+                        b.x = bmp.x + nx * (b.radius + bmp.radius + 2);
+                        b.y = bmp.y + ny * (b.radius + bmp.radius + 2);
+                        bmp.hitAnim = 1.0;
+                        sound.playGlassHit();
+                        addFloatingText(bmp.x, bmp.y - 20, `⚠️ ${bmp.label}！`, '#fbbf24');
+                        spawnParticles(bmp.x, bmp.y, '#fbbf24', 8);
+                    }
+                });
+
+                // ブロックとの衝突判定
+                for (let j = 0; j < bricks.length; j++) {
+                    const br = bricks[j];
+                    if (!br.alive) continue;
+
+                    if (
+                        b.x + b.radius > br.x &&
+                        b.x - b.radius < br.x + br.width &&
+                        b.y + b.radius > br.y &&
+                        b.y - b.radius < br.y + br.height
+                    ) {
+                        // 反射方向決定
+                        const overlapLeft = (b.x + b.radius) - br.x;
+                        const overlapRight = (br.x + br.width) - (b.x - b.radius);
+                        const overlapTop = (b.y + b.radius) - br.y;
+                        const overlapBottom = (br.y + br.height) - (b.y - b.radius);
+                        const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+                        if (minOverlap === overlapLeft || minOverlap === overlapRight) {
+                            b.vx = -b.vx;
+                        } else {
+                            b.vy = -b.vy;
+                        }
+
+                        br.hp -= b.power;
+                        br.hitAnim = 1.0;
+
+                        if (br.hp <= 0) {
+                            br.alive = false;
+                            score += br.tier.points;
+                            sound.playBlockBreak(4 - br.tier.row);
+                            spawnParticles(br.x + br.width / 2, br.y + br.height / 2, br.tier.color, 12);
+
+                            // 最高到達階層更新
+                            updateHighestTier(br.tier);
+
+                            // 北欧モードならサポートアイテムをドロップ
+                            if (mode.spawnSupportItems && Math.random() < 0.35) {
+                                spawnPowerup(br.x + br.width / 2, br.y + br.height / 2);
+                            }
+                        } else {
+                            sound.playPaddle();
+                            spawnParticles(b.x, b.y, '#ffffff', 4);
+                        }
+
+                        updateHUD();
+                        break; // 1フレーム1ブロック衝突
+                    }
+                }
+
+                // 画面下へ落下判定
+                if (b.y - b.radius > H) {
+                    balls.splice(i, 1);
+                }
+            }
+
+            // 全ボールロスト時のライフ処理
+            if (balls.length === 0) {
+                lives--;
+                updateHUD();
+                if (lives <= 0) {
+                    endGame(false);
+                    return;
+                } else {
+                    addFloatingText(W / 2, H / 2, '離職・キャリア中断… 再チャレンジ！', '#f43f5e');
+                    balls.push(createBall(paddle.x + paddle.width / 2, paddle.y - 18));
+                }
+            }
+
+            // サポートアイテム更新（北欧モード）
+            for (let i = powerups.length - 1; i >= 0; i--) {
+                const p = powerups[i];
+                p.y += 2.6 * dt;
+                if (
+                    p.y + 12 >= paddle.y &&
+                    p.y - 12 <= paddle.y + paddle.height &&
+                    p.x >= paddle.x - 15 &&
+                    p.x <= paddle.x + paddle.width + 15
+                ) {
+                    sound.playPowerup();
+                    score += 300;
+                    addFloatingText(p.x, paddle.y - 20, `✨ ${p.label}！ボール増殖`, '#34d399');
+                    if (balls.length < 5) {
+                        balls.push(createBall(paddle.x + paddle.width / 2, paddle.y - 16));
+                    }
+                    powerups.splice(i, 1);
+                    updateHUD();
+                } else if (p.y > H + 20) {
+                    powerups.splice(i, 1);
+                }
+            }
+
+            // パーティクル & フローティングテキスト更新
+            updateEffects(dt);
+
+            // 全ブロック破壊（クリア判定）
+            if (bricks.every(br => !br.alive)) {
+                endGame(true);
+            }
+        }
+
+        function updateHighestTier(tier) {
+            const order = ['一般・非正規', '係長・主任', '課長クラス', '部長クラス', '役員・政治家'];
+            if (order.indexOf(tier.short) > order.indexOf(highestTierReached)) {
+                highestTierReached = tier.short;
+                const rect = wrapper.getBoundingClientRect();
+                addFloatingText(rect.width / 2, rect.height * 0.45, `🎉 昇進達成：【${tier.short}】`, '#fbbf24');
+            }
+        }
+
+        function spawnPowerup(x, y) {
+            const labels = ['パパ育休シェア', '柔軟な働き方', 'クオータ制導入', '賃金透明化'];
+            const label = labels[Math.floor(Math.random() * labels.length)];
+            powerups.push({ x, y, label });
+        }
+
+        function addGlassCrack(hitX, hitY) {
+            const lines = [];
+            for (let i = 0; i < 4; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const len = 8 + Math.random() * 14;
+                lines.push({
+                    x1: hitX,
+                    y1: hitY,
+                    x2: hitX + Math.cos(angle) * len,
+                    y2: hitY + Math.sin(angle) * len
+                });
+            }
+            glassCeiling.cracks.push(...lines);
+            if (glassCeiling.cracks.length > 80) {
+                glassCeiling.cracks.splice(0, 4);
+            }
+        }
+
+        function spawnParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1 + Math.random() * 3.5;
+                particles.push({
+                    x, y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1.0,
+                    color,
+                    size: 2 + Math.random() * 3
+                });
+            }
+        }
+
+        function addFloatingText(x, y, text, color) {
+            floatingTexts.push({ x, y, text, color, life: 1.0 });
+        }
+
+        function updateEffects(dt) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.life -= 0.03 * dt;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const ft = floatingTexts[i];
+                ft.y -= 0.7 * dt;
+                ft.life -= 0.018 * dt;
+                if (ft.life <= 0) floatingTexts.splice(i, 1);
+            }
+        }
+
+        function triggerScreenShake() {
+            wrapper.classList.remove('shake-effect');
+            void wrapper.offsetWidth; // リフロー強制
+            wrapper.classList.add('shake-effect');
+        }
+
+        // --- 8. 描画処理 ---
+        function draw() {
+            const rect = wrapper.getBoundingClientRect();
+            const W = rect.width;
+            const H = rect.height;
+            const mode = MODES[currentModeKey];
+
+            ctx.clearRect(0, 0, W, H);
+
+            // 背景グリッド装飾
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            ctx.lineWidth = 1;
+            const gridSize = 32;
+            for (let x = 0; x < W; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+            }
+            for (let y = 0; y < H; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+            }
+
+            // 重力バイアスの視覚インジケーター（日本女性モード時は下向き矢印エフェクト）
+            if (mode.gravityY > 0.01) {
+                ctx.fillStyle = 'rgba(244, 63, 94, 0.06)';
+                ctx.font = 'bold 11px "Noto Sans JP"';
+                ctx.textAlign = 'center';
+                ctx.fillText('▼ 無償労働（家事・育児）の重力バイアス発生中 ▼', W / 2, H - 65);
+            }
+
+            // ブロック描画
+            bricks.forEach(br => {
+                if (!br.alive) return;
+                if (br.hitAnim > 0) br.hitAnim -= 0.1;
+
+                ctx.save();
+                ctx.fillStyle = br.tier.color;
+                ctx.shadowColor = br.tier.glow;
+                ctx.shadowBlur = 10;
+
+                // 角丸矩形
+                roundRect(ctx, br.x, br.y, br.width, br.height, 5);
+                ctx.fill();
+
+                // 耐久値が減っている場合のダメージ表現
+                if (br.hp < br.maxHp) {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+                    roundRect(ctx, br.x, br.y, br.width, br.height, 5);
+                    ctx.fill();
+                }
+
+                // 階層ラベル（左端のブロックに階層名を表示）
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.font = 'bold 9px "Noto Sans JP"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const label = br.tier.icon ? `${br.tier.icon}${br.tier.short}` : br.tier.short;
+                ctx.fillText(label, br.x + br.width / 2, br.y + br.height / 2);
+                ctx.restore();
+            });
+
+            // ガラスの天井描画
+            if (glassCeiling.active) {
+                ctx.save();
+                const flash = glassCeiling.hitFlash;
+                // 半透明のガラス板グラデーション
+                const grad = ctx.createLinearGradient(glassCeiling.x, glassCeiling.y, glassCeiling.x + glassCeiling.width, glassCeiling.y);
+                grad.addColorStop(0, `rgba(186, 230, 253, ${0.22 + flash * 0.4})`);
+                grad.addColorStop(0.5, `rgba(255, 255, 255, ${0.42 + flash * 0.4})`);
+                grad.addColorStop(1, `rgba(186, 230, 253, ${0.22 + flash * 0.4})`);
+
+                ctx.fillStyle = grad;
+                ctx.strokeStyle = flash > 0.1 ? '#ffffff' : 'rgba(125, 211, 252, 0.8)';
+                ctx.lineWidth = 1.5;
+                roundRect(ctx, glassCeiling.x, glassCeiling.y, glassCeiling.width, glassCeiling.height, 4);
+                ctx.fill();
+                ctx.stroke();
+
+                // ヒビの描画
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+                ctx.lineWidth = 1.2;
+                glassCeiling.cracks.forEach(c => {
+                    ctx.beginPath();
+                    ctx.moveTo(c.x1, c.y1);
+                    ctx.lineTo(c.x2, c.y2);
+                    ctx.stroke();
+                });
+
+                // ガラスの天井テキストラベル
+                ctx.fillStyle = '#e0f2fe';
+                ctx.font = 'bold 10px "Noto Sans JP"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(
+                    `🧊 ガラスの天井（管理職比率14.6%の壁）耐久値: ${glassCeiling.hp} / ${glassCeiling.maxHp}`,
+                    glassCeiling.x + glassCeiling.width / 2,
+                    glassCeiling.y + glassCeiling.height / 2
+                );
+                ctx.restore();
+            }
+
+            // アンコンシャス・バイアス障害物バンパー描画
+            bumpers.forEach(bmp => {
+                ctx.save();
+                const scale = 1 + bmp.hitAnim * 0.2;
+                ctx.translate(bmp.x, bmp.y);
+                ctx.scale(scale, scale);
+
+                ctx.beginPath();
+                ctx.arc(0, 0, bmp.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(245, 158, 11, 0.2)';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#f59e0b';
+                ctx.stroke();
+
+                ctx.fillStyle = '#fcd34d';
+                ctx.font = 'bold 8px "Noto Sans JP"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(bmp.label, 0, 0);
+                ctx.restore();
+            });
+
+            // サポートアイテム描画
+            powerups.forEach(p => {
+                ctx.save();
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
+                roundRect(ctx, p.x - 42, p.y - 10, 84, 20, 10);
+                ctx.fill();
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 9px "Noto Sans JP"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`✨${p.label}`, p.x, p.y);
+                ctx.restore();
+            });
+
+            // パドル描画
+            ctx.save();
+            const paddleGrad = ctx.createLinearGradient(paddle.x, paddle.y, paddle.x + paddle.width, paddle.y);
+            paddleGrad.addColorStop(0, '#38bdf8');
+            paddleGrad.addColorStop(0.5, '#818cf8');
+            paddleGrad.addColorStop(1, '#f43f5e');
+            ctx.fillStyle = paddleGrad;
+            ctx.shadowColor = 'rgba(56, 189, 248, 0.5)';
+            ctx.shadowBlur = 12;
+            roundRect(ctx, paddle.x, paddle.y, paddle.width, paddle.height, 7);
+            ctx.fill();
+            ctx.restore();
+
+            // ボール描画
+            balls.forEach(b => {
+                // 軌跡
+                b.trail.forEach((t, idx) => {
+                    const alpha = (idx / b.trail.length) * 0.3;
+                    ctx.beginPath();
+                    ctx.arc(t.x, t.y, b.radius * (idx / b.trail.length), 0, Math.PI * 2);
+                    ctx.fillStyle = b.color;
+                    ctx.globalAlpha = alpha;
+                    ctx.fill();
+                });
+                ctx.globalAlpha = 1.0;
+
+                // 本体
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.shadowColor = b.color;
+                ctx.shadowBlur = 14;
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = b.color;
+                ctx.stroke();
+                ctx.restore();
+            });
+
+            // パーティクル描画
+            particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.life);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+                ctx.restore();
+            });
+
+            // フローティングテキスト描画
+            floatingTexts.forEach(ft => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, ft.life);
+                ctx.fillStyle = ft.color;
+                ctx.font = 'bold 12px "Noto Sans JP"';
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                ctx.shadowBlur = 4;
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.restore();
+            });
+        }
+
+        function roundRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+        }
+
+        // --- 9. HUD & リザルト処理 ---
+        function updateHUD() {
+            document.getElementById('hud-score').textContent = String(score).padStart(5, '0');
+            document.getElementById('hud-tier').textContent = highestTierReached;
+
+            const mode = MODES[currentModeKey];
+            const ceilingEl = document.getElementById('hud-ceiling-hp');
+            if (mode.ceilingMaxHp === 0) {
+                ceilingEl.textContent = 'NONE (0)';
+                ceilingEl.className = 'font-mono-tech font-bold text-slate-400';
+            } else {
+                ceilingEl.textContent = `${glassCeiling.hp} / ${glassCeiling.maxHp}`;
+                ceilingEl.className = glassCeiling.hp > 0
+                    ? 'font-mono-tech font-bold text-rose-400'
+                    : 'font-mono-tech font-bold text-emerald-400';
+            }
+
+            document.getElementById('hud-lives').textContent = '●'.repeat(Math.max(0, lives)) + '○'.repeat(Math.max(0, 3 - lives));
+        }
+
+        function endGame(isVictory) {
+            gameState = isVictory ? 'VICTORY' : 'GAMEOVER';
+            const mode = MODES[currentModeKey];
+            const overlay = document.getElementById('overlay-result');
+            overlay.classList.remove('hidden');
+
+            const badge = document.getElementById('result-badge');
+            const title = document.getElementById('result-title');
+            const subtitle = document.getElementById('result-subtitle');
+
+            if (isVictory) {
+                badge.textContent = '🎉 COMPLETE / TOP TIER REACHED';
+                badge.className = 'px-3 py-1 rounded-full text-xs font-mono-tech font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 mb-2';
+                title.textContent = '最上段「役員・政治家」到達！';
+                subtitle.textContent = `${mode.name} で全ての階層を突破しました`;
+            } else {
+                badge.textContent = '📉 CAREER INTERRUPTED';
+                badge.className = 'px-3 py-1 rounded-full text-xs font-mono-tech font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 mb-2';
+                title.textContent = 'キャリア中断（GAME OVER）';
+                subtitle.textContent = `最高到達階層：【${highestTierReached}】`;
+            }
+
+            document.getElementById('result-score').textContent = `${score.toLocaleString()} pts`;
+
+            const dmgEl = document.getElementById('result-ceiling-dmg');
+            if (mode.ceilingMaxHp === 0) {
+                dmgEl.textContent = '最初から存在しない（0%）';
+                dmgEl.className = 'font-mono-tech font-bold text-cyan-400';
+            } else {
+                const dmgPercent = Math.round(((mode.ceilingMaxHp - glassCeiling.hp) / mode.ceilingMaxHp) * 100);
+                dmgEl.textContent = glassCeiling.hp === 0 ? '100% (完全破壊！)' : `${dmgPercent}% (残HP: ${glassCeiling.hp})`;
+                dmgEl.className = glassCeiling.hp === 0 ? 'font-mono-tech font-bold text-emerald-400' : 'font-mono-tech font-bold text-rose-400';
+            }
+
+            document.getElementById('result-trivia').textContent = mode.trivia;
+        }
+
+        // --- 10. イベントリスナー（マウス・タッチ・キーボード・UI） ---
+        function movePaddleToClientX(clientX) {
+            const rect = canvas.getBoundingClientRect();
+            const relX = clientX - rect.left;
+            paddle.x = Math.max(4, Math.min(rect.width - paddle.width - 4, relX - paddle.width / 2));
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (gameState === 'PLAYING') movePaddleToClientX(e.clientX);
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (gameState === 'PLAYING' && e.touches.length > 0) {
+                e.preventDefault();
+                movePaddleToClientX(e.touches[0].clientX);
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchstart', (e) => {
+            if (gameState === 'PLAYING' && e.touches.length > 0) {
+                movePaddleToClientX(e.touches[0].clientX);
+            }
+        }, { passive: true });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+        });
+
+        // モバイル補助ボタン
+        const touchLeft = document.getElementById('touch-left');
+        const touchRight = document.getElementById('touch-right');
+        touchLeft.addEventListener('touchstart', (e) => { e.preventDefault(); keys.left = true; });
+        touchLeft.addEventListener('touchend', () => { keys.left = false; });
+        touchRight.addEventListener('touchstart', (e) => { e.preventDefault(); keys.right = true; });
+        touchRight.addEventListener('touchend', () => { keys.right = false; });
+
+        // UIボタン類
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('retry-btn').addEventListener('click', startGame);
+        document.getElementById('switch-mode-btn').addEventListener('click', () => {
+            const order = ['jp_female', 'jp_male', 'nordic'];
+            const next = order[(order.indexOf(currentModeKey) + 1) % order.length];
+            selectMode(next);
+        });
+
+        document.getElementById('sound-toggle').addEventListener('click', () => {
+            sound.init();
+            const isMuted = sound.toggleMute();
+            document.getElementById('sound-icon').textContent = isMuted ? '🔇' : '🔊';
+            document.getElementById('sound-label').textContent = isMuted ? 'MUTED' : 'SOUND ON';
+        });
+
+        // ヘルプモーダル制御
+        const helpModal = document.getElementById('help-modal');
+        document.getElementById('help-btn').addEventListener('click', () => helpModal.classList.remove('hidden'));
+        document.getElementById('close-help-btn').addEventListener('click', () => helpModal.classList.add('hidden'));
+        document.getElementById('close-help-bottom').addEventListener('click', () => helpModal.classList.add('hidden'));
+
+        // --- 11. 初期起動 ---
+        window.onload = () => {
+            resizeCanvas();
+            selectMode('jp_female');
+        };
+    </script>
+</body>
+</html>
